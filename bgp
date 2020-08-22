@@ -1,0 +1,105 @@
+Filtering by AS_PATH
+•	The list of networks can soon build up and IP bases ACLs become unwieldy
+•	Filtering by AS_PATH means filtering based on AS numbers
+•	Neighbor x.x.x.x filter-list
+•	Regular expressions can be used……..
+
+Regular Expressions
+The Metacharacters -
+.	Any single character including space
+[]	Any character list between brackets
+[^]	Any character except those between the brackets
+()	All the characters between these paranthesis
+-	Indicates a range
+?	Zero or one instance of the pattern
+*	Zero or more instances of the pattern
++	One or more instances of the pattern
+^	Start of a line
+$	End of a line
+|	Either of the literals
+_	A comma, the beginning of the line, the end of the line or a space
+
+Delineation: Defining the start and end of a line
+•	IP AS-PATH ACCESS-LIST 20 PERMIT 850
+o	This will match any path that includes 850, for example (850), (23, 8500, 700), (79, 850, 60) or (7,5850, 45)
+•	IP AS-PATH ACCESS-LIST 20 PERMIT ^850$
+o	^ indicates that start of the line and $ the end so this example lists AS_PATH (850) only
+•	IP AS-PATH ACCESS-LIST 20 PERMIT ^$
+o	This represents the start and finish of the line with nothing in the middle – no AS_PATH information. Handy if you want to filter NRLI information originating in my AS
+Bracketing: Matching a list of characters.
+•	IP AS-PATH ACCESS-LIST 25 PERMIT ^85[0123459]$
+o	Any of the characters inside the brackets can be used as a single character – 850, 851, 852, 853, 854, 855 or 859
+•	IP AS-PATH ACCESS-LIST 25 PERMIT ^85[0-5]$
+o	The same as the previous example but without 859
+Negating: Matching everything except a set of characters
+•	IP AS-PATH ACCESS-LIST 25 PERMIT ^85[^5-9]$
+o	Will match a single character after 85 that is not 5-9; 850, 851, 852, 853 or 854
+Wildcard: matching any single character
+•	IP AS-PATH ACCESS-LIST 30 PERMIT ^85.
+o	Matches any single character or space after 85; 85 or 850-9
+Alternation:  Matching one of a set of numbers
+•	IP AS-PATH ACCESS-LIST 35 PERMIT ^(850 | 851)$
+o	Matches either 850 or 851
+•	IP AS-PATH ACCESS-LIST 35 PERMIT ^(851 | 852 | 853 | 850)*
+o	Matches either 851, 852, 853 or 850
+Optional Characters: Matching a character that may or may not be there
+•	IP AS-PATH ACCESS-LIST 40 PERMIT ^(850)?$
+o	This string matches either zero or one instances of a literal, in this case AS 850
+Repetition: Matching a number of repeating characters
+•	IP AS-PATH ACCESS-LIST 45 PERMIT ^(850)*$
+o	The * denotes zero or more instances of a literal so this would filter on a path consisting of one or more 850, for example (850), (850, 850), (850, 850, 850) etc
+•	IP AS-PATH ACCESS-LIST 45 PERMIT ^(850)+$
+o	This filter demands that at least one instance of 850 must exist in the AS_PATH
+Boundaries: Delineating literals
+•	IP AS-PATH ACCESS-LIST 50 PERMIT ^5610_148_284_13$
+o	This filter matches the exact AS_PATH (5610, 148, 284, 13)
+•	IP AS-PATH ACCESS-LIST 50 PERMIT _5610_148_284_13_
+o	This filer matches an AS_PATH that includes the  5610, 148, 284, 13
+Complicated: Putting it all together
+•	IP AS-PATH ACCESS-LIST 55 PERMIT ^(550)+[880|2304]?_1805_.$
+o	^(550)+        At least one 550
+o	[880|2304]?   Zero or one instance of 880 or 2304
+o	_1805_           Then a single instance of 1805
+o	.                     And finally either none or multiple AS’
+….and back to filter-lists
+This is a nice basic filter-list that says only traffic with no AS_PATH information in it can be forwarded. It’s used so that only networks from within the AS are advertised – any networks being learnt via EBGP will have AS path information in them from the peer AS.
+
+router bgp 200
+neighbor 1.1.1.3 remote-as 300
+ neighbor 1.1.1.3 ebgp-multihop 2
+ neighbor 1.1.1.3 update-source Loopback0
+ neighbor 1.1.1.3 distribute-list 1 out
+ neighbor 1.1.1.3 filter-list 50 out
+!
+ip as-path access-list 50 permit ^$
+
+This filter-list advertises local AS network using ^$, no networks with AS 50 in a list of AS’ with _50_ but allowing AS 50 on it’s own using ^50$.
+
+router bgp 200
+neighbor 1.1.1.3 remote-as 300
+ neighbor 1.1.1.3 ebgp-multihop 2
+ neighbor 1.1.1.3 update-source Loopback0
+ neighbor 1.1.1.3 distribute-list 1 out
+ neighbor 1.1.1.3 filter-list 50 out
+!
+ip as-path access-list 50 deny _50_
+ip as-path access-list 50 permit ^$
+ip as-path access-list 50 permit ^50$
+
+Filtering with route-maps
+A route-map can use either NLRI ACLs or as-path ACLs to filter on AS_PATH. Here are two simple examples…
+
+This first route map allows outbound routes that originate inside the AS - ^$ - or routes that only have AS 100 in their AS_PATH attributes - ^100$ - 
+
+router bgp 200
+ neighbor 1.1.1.3 remote-as 300
+ neighbor 1.1.1.3 ebgp-multihop 2
+ neighbor 1.1.1.3 update-source Loopback0
+ neighbor 1.1.1.3 route-map MONKEY out
+!
+ip as-path access-list 50 permit ^$
+ip as-path access-list 50 permit ^100$
+!
+route-map MONKEY permit 10
+ match as-path 50
+
